@@ -16,6 +16,8 @@
  *   OPENAI_API_KEY   dummy (LiteLLM は認証なし運用)
  *   MODEL_NAME       gemma-smart
  *   MCP_EPSG_PATH    epsg-mcp の build/index.js (既定: sibling 解決)
+ *   MCP_RXJS_PATH    rxjs-mcp-server の dist/index.js (既定: sibling 解決)
+ *   TOOL_FILTER      bind するツール名 CSV / "all" で全ツール (既定: epsg 3 ツール)
  */
 import 'dotenv/config';
 import { homedir } from 'node:os';
@@ -35,6 +37,9 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 const epsgPath =
   process.env.MCP_EPSG_PATH ??
   resolve(homedir(), 'workspace/shuji-bonji/mcps/epsg-mcp/build/index.js');
+const rxjsPath =
+  process.env.MCP_RXJS_PATH ??
+  resolve(homedir(), 'workspace/shuji-bonji/mcps/rxjs-mcp-server/dist/index.js');
 
 const mcpClient = new MultiServerMCPClient({
   mcpServers: {
@@ -42,6 +47,12 @@ const mcpClient = new MultiServerMCPClient({
       transport: 'stdio',
       command: 'node',
       args: [epsgPath],
+    },
+    // 2 サーバ目 (Phase 3 後半): 意味的に遠いドメインでサーバ横断のツール選択を検証
+    rxjs: {
+      transport: 'stdio',
+      command: 'node',
+      args: [rxjsPath],
     },
   },
 });
@@ -132,7 +143,7 @@ try {
         {
           role: 'system',
           content:
-            'あなたは測地系に詳しいアシスタント。質問に答える前に、必ず提供されたツールで根拠を調べること。' +
+            'あなたは技術アシスタント。質問に答える前に、必ず提供されたツールから質問のドメインに合うものを選び、根拠を調べること。' +
             'ツールを使う時は通常のテキストを書かず、tool call として正しい name と arguments を指定すること。回答は日本語で簡潔に。',
         },
         { role: 'user', content: question },
