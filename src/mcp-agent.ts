@@ -23,7 +23,7 @@ import 'dotenv/config';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { ChatOpenAI } from '@langchain/openai';
-import { AIMessage, type BaseMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import {
   StateGraph,
   START,
@@ -140,14 +140,12 @@ try {
   const result = await graph.invoke(
     {
       messages: [
-        {
-          role: 'system',
-          content:
-            'あなたは技術アシスタント。質問に答える前に、必ず提供されたツールから質問のドメインに合うものを選び、根拠を調べること。' +
+        new SystemMessage(
+          'あなたは技術アシスタント。質問に答える前に、必ず提供されたツールから質問のドメインに合うものを選び、根拠を調べること。' +
             'ツールを使う時は通常のテキストを書かず、tool call として正しい name と arguments を指定すること。回答は日本語で簡潔に。',
-        },
-        { role: 'user', content: question },
-      ] as BaseMessage[],
+        ),
+        new HumanMessage(question),
+      ],
     },
     { recursionLimit: 12 }, // agent⇄tools の往復上限 (暴走ガード)
   );
