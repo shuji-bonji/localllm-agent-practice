@@ -14,9 +14,14 @@
     nvm 等を使っている場合は解決済みの絶対パスに置き換える
     (LaunchDaemon はログインシェルを通さないため PATH も明示する)。
   -->
+  <!--
+    node は nvm 管理(neko8: v24.16.0)。nvm の node はシェルを通さなくても
+    絶対パスで直接実行できるため、解決済みパスをそのまま指定する。
+    node を別バージョンに切り替えたら、このパスと下の PATH も更新すること。
+  -->
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/bonji/.nvm/versions/node/v24.16.0/bin/node</string>
     <string>/Users/bonji/workspace/localllm-agent-practice/node_modules/tsx/dist/cli.mjs</string>
     <string>src/a2a-server.ts</string>
   </array>
@@ -34,7 +39,7 @@
     <key>HOME</key>
     <string>/Users/bonji</string>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>/Users/bonji/.nvm/versions/node/v24.16.0/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <!--
       接続先・公開URL は WorkingDirectory の .env からも読めるが、
       常駐の自己完結性を上げるためここでも明示しておく(任意)。

@@ -1,6 +1,6 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
-  "include": ["src", "test"],
+  "include": ["src", "test", "bench"],
   "compilerOptions": {
     // File Layout
     "outDir": "dist",

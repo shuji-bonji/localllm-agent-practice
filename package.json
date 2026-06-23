@@ -10,6 +10,7 @@
     "mcp-agent": "tsx src/mcp-agent.ts",
     "a2a": "tsx src/a2a-server.ts",
     "a2a:smoke": "tsx test/a2a-smoke.ts",
+    "lsp-bench": "tsx bench/lsp-bench.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

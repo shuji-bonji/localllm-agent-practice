@@ -34,6 +34,14 @@ const SYSTEM_PROMPT =
   'ツールを使う時は通常のテキストを書かず、tool call として正しい name と arguments を指定すること。' +
   '回答は日本語で、コードは ```ts コードブロックで示すこと。';
 
+/**
+ * ツール構成:
+ *  - 'auto': 既存の best-effort (rxjs-mcp があれば bind) — A2A の既定
+ *  - 'none': ツール無し (素の LLM) — step1.5 の LSP 無し条件
+ *  - 'lsp' : Serena (symbol-level LSP) を bind — step1.5 の LSP 有り条件
+ */
+export type ToolMode = 'none' | 'lsp' | 'auto';
+
 export interface CodingAgentResult {
   /** 最終回答テキスト */
   text: string;
@@ -41,29 +49,64 @@ export interface CodingAgentResult {
   rounds: number;
   /** 実際に bind したツール名 */
   tools: string[];
+  /** ループ全体のトークン使用量 (usage_metadata 集計) */
+  tokens: { input: number; output: number; total: number };
 }
 
 export interface RunOptions {
   /** 進捗テキストを受け取るフック (A2A の status-update へ中継する用) */
   onStatus?: (note: string) => void;
+  /** ツール構成 (既定 'auto')。step1.5 計測は 'none' / 'lsp' を切替える */
+  tools?: ToolMode;
 }
 
-/** rxjs-mcp / lsp-mcp 等を best-effort で起動し、bind 可能なツール一覧を返す */
-async function loadTools(): Promise<{
+type StdioServer = { transport: 'stdio'; command: string; args: string[] };
+
+/**
+ * モードに応じて MCP サーバを spawn し、bind 可能なツール一覧を返す。
+ *  - 'none': 何も起動しない
+ *  - 'lsp' : Serena (symbol-level LSP) を起動。LSP_PROJECT に対象リポジトリが必要
+ *  - 'auto': rxjs-mcp を best-effort (dist があれば)
+ * spawn できる実体が無ければツール無しで続行 (最小構成を壊さない)。
+ */
+async function loadTools(mode: ToolMode): Promise<{
   client: MultiServerMCPClient | null;
   tools: StructuredToolInterface[];
 }> {
-  const rxjsPath =
-    process.env.MCP_RXJS_PATH ??
-    resolve(homedir(), 'workspace/shuji-bonji/mcps/rxjs-mcp-server/dist/index.js');
-
-  // ツールを spawn できる実体が無ければツール無しで続行 (最小構成を壊さない)
-  const servers: Record<string, { transport: 'stdio'; command: string; args: string[] }> = {};
-  if (existsSync(rxjsPath)) {
-    servers.rxjs = { transport: 'stdio', command: 'node', args: [rxjsPath] };
+  if (mode === 'none') {
+    return { client: null, tools: [] };
   }
-  // step1.5: ここに lsp-mcp を足す
-  // const lspPath = process.env.MCP_LSP_PATH; if (lspPath && existsSync(lspPath)) { servers.lsp = {...} }
+
+  const servers: Record<string, StdioServer> = {};
+  let filter: string;
+
+  if (mode === 'lsp') {
+    // step1.5: Serena を計測器として繋ぐ。symbol 名で呼べるため 26B でも通りやすい。
+    const project = process.env.LSP_PROJECT;
+    if (!project) {
+      throw new Error("tools:'lsp' には LSP_PROJECT (対象リポジトリの絶対パス) が必要です");
+    }
+    const command = process.env.SERENA_CMD ?? 'uvx';
+    // 既定は uvx で oraios/serena を取得し stdio 起動。SERENA_ARGS で上書き可 (CSV)
+    const baseArgs = (
+      process.env.SERENA_ARGS ??
+      '--from,git+https://github.com/oraios/serena,serena,start-mcp-server,--context,ide-assistant,--transport,stdio'
+    ).split(',');
+    servers.serena = { transport: 'stdio', command, args: [...baseArgs, '--project', project] };
+    // 26B のツール過多崩れ対策: read-only な symbol 系 3 つだけ bind
+    filter =
+      process.env.LSP_TOOL_FILTER ??
+      'find_symbol,find_referencing_symbols,get_symbols_overview';
+  } else {
+    // 'auto': 既存の best-effort (rxjs-mcp があれば)
+    const rxjsPath =
+      process.env.MCP_RXJS_PATH ??
+      resolve(homedir(), 'workspace/shuji-bonji/mcps/rxjs-mcp-server/dist/index.js');
+    if (existsSync(rxjsPath)) {
+      servers.rxjs = { transport: 'stdio', command: 'node', args: [rxjsPath] };
+    }
+    filter = process.env.TOOL_FILTER ?? 'all';
+  }
 
   if (Object.keys(servers).length === 0) {
     return { client: null, tools: [] };
@@ -71,12 +114,8 @@ async function loadTools(): Promise<{
 
   const client = new MultiServerMCPClient({ mcpServers: servers });
   const all = await client.getTools();
-  // 26B はツール数・スキーマ複雑度で tool calling が崩れるため必要分だけ bind
-  const filter = process.env.TOOL_FILTER ?? 'all';
   const tools =
-    filter === 'all'
-      ? all
-      : all.filter((t) => filter.split(',').includes(t.name));
+    filter === 'all' ? all : all.filter((t) => filter.split(',').includes(t.name));
   return { client, tools };
 }
 
@@ -89,11 +128,12 @@ export async function runCodingAgent(
   opts: RunOptions = {},
 ): Promise<CodingAgentResult> {
   const { onStatus } = opts;
-  const { client, tools } = await loadTools();
+  const mode: ToolMode = opts.tools ?? 'auto';
+  const { client, tools } = await loadTools(mode);
   onStatus?.(
     tools.length > 0
-      ? `ツール ${tools.length} 件を読み込み: ${tools.map((t) => t.name).join(', ')}`
-      : 'ツール無し (素の LLM コーディングモード)',
+      ? `ツール ${tools.length} 件を読み込み (mode=${mode}): ${tools.map((t) => t.name).join(', ')}`
+      : `ツール無し (mode=${mode}, 素の LLM コーディングモード)`,
   );
 
   try {
@@ -161,7 +201,22 @@ export async function runCodingAgent(
         ? last.content
         : JSON.stringify(last?.content ?? '');
 
-    return { text, rounds, tools: tools.map((t) => t.name) };
+    // ループ全体のトークンを集計 (各 AIMessage の usage_metadata を合算)
+    let input = 0;
+    let output = 0;
+    for (const m of result.messages) {
+      if (m instanceof AIMessage && m.usage_metadata) {
+        input += m.usage_metadata.input_tokens ?? 0;
+        output += m.usage_metadata.output_tokens ?? 0;
+      }
+    }
+
+    return {
+      text,
+      rounds,
+      tools: tools.map((t) => t.name),
+      tokens: { input, output, total: input + output },
+    };
   } finally {
     await client?.close();
   }

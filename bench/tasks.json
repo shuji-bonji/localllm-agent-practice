@@ -1,0 +1,20 @@
+{
+  "note": "step1.5 計測タスク。expect は『正答テキストに必ず含まれるべき部分文字列(ファイル名 / symbol 名)』で、小文字化して部分一致で判定する。対象リポジトリ(LSP_PROJECT)の実際の構造に合わせて編集すること。既定値は shuji-mcp-patterns 構成(definitions.ts / handlers.ts / index.ts)を前提にしている。",
+  "tasks": [
+    {
+      "id": "def-location",
+      "goal": "このリポジトリで MCP ツール定義の配列は、どのファイルにどんな名前で定義されている? ファイルパスと変数名を答えて。",
+      "expect": ["definitions", "tools"]
+    },
+    {
+      "id": "handler-dispatch",
+      "goal": "ツールハンドラをディスパッチしている表(名前→関数の対応)はどこにある? ファイルと識別子を答えて。",
+      "expect": ["handlers", "toolhandlers"]
+    },
+    {
+      "id": "entrypoint",
+      "goal": "サーバのエントリポイント(stdio で MCP 接続を確立している場所)はどのファイル?",
+      "expect": ["index.ts"]
+    }
+  ]
+}

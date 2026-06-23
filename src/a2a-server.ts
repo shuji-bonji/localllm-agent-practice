@@ -170,7 +170,7 @@ export class CodingAgentExecutor implements AgentExecutor {
         taskId,
         contextId,
         status: { state: 'completed', timestamp: new Date().toISOString() },
-        metadata: { rounds: result.rounds, tools: result.tools },
+        metadata: { rounds: result.rounds, tools: result.tools, tokens: result.tokens },
         final: true,
       } satisfies TaskStatusUpdateEvent);
       bus.finished();
