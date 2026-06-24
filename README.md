@@ -9,22 +9,32 @@ LangGraph.js で組んだコーディングエージェント（層1）を `@a2a
 ## 二層構造
 
 ```mermaid
-flowchart TB
-    subgraph P["このプロセス (neko8 / :41241)"]
-        SV["層2: A2A サーバ (src/a2a-server.ts)<br/>Agent Card + JSON-RPC + Task"]
+flowchart LR
+    subgraph MK["🖥 クライアント側 (mikuro 等)"]
+        CL["Claude"]
+        MB["localllm-mcp / delegate_task<br/>(A2A client・listen なし)"]
+        CL -->|"MCP tool"| MB
+    end
+    subgraph NK["🔌 neko8 (:41241 常駐)"]
+        SV["層2: A2A サーバ (src/a2a-server.ts)<br/>Agent Card + JSON-RPC + Task (listen :41241)"]
         EX["層1: コーディングエージェント (src/coding-agent.ts)<br/>runCodingAgent / LangGraph.js"]
         SV --> EX
     end
+    MB -->|"① GET agent-card.json<br/>② message/send"| SV
+    OT["他エージェント<br/>(A2A client 直)"] -->|"message/send"| SV
     EX -->|":4000 gemma-smart"| LH["neko8 LiteLLM"]
-    EX -.->|"tools (任意)"| MCP["MCP 群 (rxjs / Serena LSP …)"]
-    CL["Claude / 他エージェント"] -->|"message/send"| SV
+    EX -.->|"tools (任意)"| MCPT["MCP 群 (rxjs / Serena LSP …)"]
 
+    style CL fill:#dbeafe,stroke:#1d4ed8,color:#000
+    style MB fill:#dbeafe,stroke:#1d4ed8,color:#000
     style SV fill:#fef9c3,stroke:#a16207,color:#000
     style EX fill:#dcfce7,stroke:#15803d,color:#000
+    style LH fill:#FFB6C1,stroke:#a1006b,color:#000
 ```
 
+- **クライアント側（Claude）** … Claude は外部接続を MCP 経由で行うため、`localllm-mcp` の `delegate_task`（A2A クライアントを内蔵した MCP ツール）が Agent Card 発見 → `message/send` を担う。listen ポートは持たない（発信のみ）。他のエージェントは A2A クライアントで直接 `:41241` を叩いてもよい。
 - **層1 `src/coding-agent.ts`** … `runCodingAgent(goal, opts)`。gemma-smart を頭脳に、ゴールを受けて自分で手順を決めるループ。判断の主体は neko8 側。
-- **層2 `src/a2a-server.ts`** … 層1 を A2A で公開。Agent Card（`neko8-coding-agent` / skill `coding-task`）+ Task ライフサイクル。待受 `:41241`。
+- **層2 `src/a2a-server.ts`** … 層1 を A2A で公開。Agent Card（`neko8-coding-agent` / skill `coding-task`）+ Task ライフサイクル。`:41241` で listen する Server。
 
 ## セットアップ
 
