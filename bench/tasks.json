@@ -1,5 +1,5 @@
 {
-  "note": "step1.5 計測タスク。expect は『正答テキストに必ず含まれるべき部分文字列(ファイル名 / symbol 名)』で、小文字化して部分一致で判定する。対象リポジトリ(LSP_PROJECT)の実際の構造に合わせて編集すること。既定値は shuji-mcp-patterns 構成(definitions.ts / handlers.ts / index.ts)を前提にしている。",
+  "note": "step1.5 計測タスク。expect は『正答テキストに必ず含まれるべき部分文字列(ファイル名 / symbol 名)』で、小文字化して部分一致で判定する。既定は対象リポジトリ = localllm-mcp (src/tools/definitions.ts・handlers.ts・src/index.ts) を前提にしている。別リポを LSP_PROJECT に指定する場合は expect をそのリポの実構造に合わせて編集すること。expect は『当て推量で当たらない=ツールで調べないと出ない』語(symbol 名等)を含めると LSP の効果が出やすい。",
   "tasks": [
     {
       "id": "def-location",
@@ -8,13 +8,13 @@
     },
     {
       "id": "handler-dispatch",
-      "goal": "ツールハンドラをディスパッチしている表(名前→関数の対応)はどこにある? ファイルと識別子を答えて。",
+      "goal": "ツール名からハンドラ関数へディスパッチしている表(オブジェクト)はどこにある? ファイルと識別子を答えて。",
       "expect": ["handlers", "toolhandlers"]
     },
     {
       "id": "entrypoint",
-      "goal": "サーバのエントリポイント(stdio で MCP 接続を確立している場所)はどのファイル?",
-      "expect": ["index.ts"]
+      "goal": "サーバのエントリポイントで MCP の stdio 接続を確立しているのはどのファイルか、そこで使われているトランスポートのクラス名も答えて。",
+      "expect": ["index.ts", "stdioservertransport"]
     }
   ]
 }

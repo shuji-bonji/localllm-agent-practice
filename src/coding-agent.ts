@@ -86,11 +86,19 @@ async function loadTools(mode: ToolMode): Promise<{
     if (!project) {
       throw new Error("tools:'lsp' には LSP_PROJECT (対象リポジトリの絶対パス) が必要です");
     }
+    // 計測を黙って無効化しないための preflight: パスが実在しないと Serena は
+    // project を activate できず、全ツール呼び出しが "No active project" で失敗する。
+    if (!existsSync(project)) {
+      throw new Error(
+        `LSP_PROJECT が存在しません: ${project} (この環境=neko8 に対象リポジトリを clone した実在パスを指定すること)`,
+      );
+    }
     const command = process.env.SERENA_CMD ?? 'uvx';
     // 既定は uvx で oraios/serena を取得し stdio 起動。SERENA_ARGS で上書き可 (CSV)
+    // context は 'claude-code' (旧 'ide-assistant' は deprecated)。
     const baseArgs = (
       process.env.SERENA_ARGS ??
-      '--from,git+https://github.com/oraios/serena,serena,start-mcp-server,--context,ide-assistant,--transport,stdio'
+      '--from,git+https://github.com/oraios/serena,serena,start-mcp-server,--context,claude-code,--transport,stdio'
     ).split(',');
     servers.serena = { transport: 'stdio', command, args: [...baseArgs, '--project', project] };
     // 26B のツール過多崩れ対策: read-only な symbol 系 3 つだけ bind

@@ -16,7 +16,7 @@
  *   MODEL_NAME / OPENAI_BASE_URL ...  coding-agent.ts と共通
  */
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runCodingAgent, type ToolMode } from '../src/coding-agent.js';
 
@@ -34,6 +34,20 @@ const tasksPath = process.env.BENCH_TASKS ?? resolve('bench/tasks.json');
 const { tasks } = JSON.parse(readFileSync(tasksPath, 'utf8')) as TasksFile;
 const repeat = Number(process.env.BENCH_REPEAT ?? 1);
 const modes: ToolMode[] = ['none', 'lsp'];
+
+// preflight: lsp 条件は LSP_PROJECT が実在しないと Serena が project を開けず
+// 全ツールが失敗して「計測したつもり」の無効データになる。先に弾く。
+if (modes.includes('lsp')) {
+  const project = process.env.LSP_PROJECT;
+  if (!project || !existsSync(project)) {
+    console.error(
+      `[preflight] LSP_PROJECT が未設定か実在しません: ${project ?? '(未設定)'}\n` +
+        '  対象リポジトリを この環境(neko8) に clone し、その実在パスを指定してください。\n' +
+        '  例: LSP_PROJECT=/Users/bonji/workspace/localllm-agent-practice npm run lsp-bench',
+    );
+    process.exit(1);
+  }
+}
 
 function median(xs: number[]): number {
   if (xs.length === 0) return 0;
