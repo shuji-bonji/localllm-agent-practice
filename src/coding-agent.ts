@@ -34,6 +34,15 @@ const SYSTEM_PROMPT =
   'ツールを使う時は通常のテキストを書かず、tool call として正しい name と arguments を指定すること。' +
   '回答は日本語で、コードは ```ts コードブロックで示すこと。';
 
+// ツール(LSP=Serena)使用時に付与する手引き。26B が空振りループに陥らないための収束ガイド。
+const TOOL_GUIDE =
+  '\n\n【コード調査ツールの使い方】' +
+  '(1) まず list_dir でディレクトリ構成を、find_file でファイルを把握する。' +
+  '(2) get_symbols_overview は「ファイルパス」(例: src/index.ts) に対してのみ使う。ディレクトリ(. や src)は不可。' +
+  '(3) find_symbol は具体的な symbol 名で呼ぶ。"*" や "/" のような曖昧な値で繰り返さない。' +
+  '(4) 必要な情報(ファイル名・symbol 名)が得られたら、それ以上ツールを呼ばず直ちに最終回答を書く。' +
+  '同じ検索を繰り返さないこと。';
+
 /**
  * ツール構成:
  *  - 'auto': 既存の best-effort (rxjs-mcp があれば bind) — A2A の既定
@@ -95,16 +104,18 @@ async function loadTools(mode: ToolMode): Promise<{
     }
     const command = process.env.SERENA_CMD ?? 'uvx';
     // 既定は uvx で oraios/serena を取得し stdio 起動。SERENA_ARGS で上書き可 (CSV)
-    // context は 'claude-code' (旧 'ide-assistant' は deprecated)。
+    // context は 'agent' (素のエージェント用)。'claude-code' は list_dir/find_file 等を
+    // 除外する=ホスト側がファイル閲覧を持つ前提なので、単体エージェントには不適。
     const baseArgs = (
       process.env.SERENA_ARGS ??
-      '--from,git+https://github.com/oraios/serena,serena,start-mcp-server,--context,claude-code,--transport,stdio'
+      '--from,git+https://github.com/oraios/serena,serena,start-mcp-server,--context,agent,--transport,stdio'
     ).split(',');
     servers.serena = { transport: 'stdio', command, args: [...baseArgs, '--project', project] };
-    // 26B のツール過多崩れ対策: read-only な symbol 系 3 つだけ bind
+    // 26B のツール過多崩れ対策で絞るが、ファイル探索 (list_dir/find_file) は必須。
+    // これが無いとモデルはファイル構成を見られず symbol 名を当て推量して空振りループに陥る。
     filter =
       process.env.LSP_TOOL_FILTER ??
-      'find_symbol,find_referencing_symbols,get_symbols_overview';
+      'list_dir,find_file,get_symbols_overview,find_symbol,find_referencing_symbols';
   } else {
     // 'auto': 既存の best-effort (rxjs-mcp があれば)
     const rxjsPath =
@@ -193,11 +204,11 @@ export async function runCodingAgent(
     const result = await graph.invoke(
       {
         messages: [
-          new SystemMessage(SYSTEM_PROMPT),
+          new SystemMessage(tools.length > 0 ? SYSTEM_PROMPT + TOOL_GUIDE : SYSTEM_PROMPT),
           new HumanMessage(userText),
         ],
       },
-      { recursionLimit: 12 },
+      { recursionLimit: Number(process.env.RECURSION_LIMIT ?? 12) },
     );
 
     const rounds = result.messages.filter(

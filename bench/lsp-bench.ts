@@ -60,6 +60,7 @@ interface Agg {
   mode: ToolMode;
   pass: number;
   n: number;
+  errors: number;
   tokens: number;
   rounds: number;
 }
@@ -71,6 +72,7 @@ for (const mode of modes) {
   const roundsArr: number[] = [];
   let pass = 0;
   let n = 0;
+  let errors = 0;
 
   for (const t of tasks) {
     for (let r = 0; r < repeat; r++) {
@@ -85,27 +87,33 @@ for (const mode of modes) {
           `[${mode}] ${t.id} #${r + 1} ok=${ok} tokens=${res.tokens.total} rounds=${res.rounds}`,
         );
       } catch (e) {
+        errors++;
         console.error(`[${mode}] ${t.id} #${r + 1} ERROR ${e instanceof Error ? e.message : e}`);
       }
     }
   }
 
-  results.push({ mode, pass, n, tokens: median(tokensArr), rounds: median(roundsArr) });
+  results.push({ mode, pass, n, errors, tokens: median(tokensArr), rounds: median(roundsArr) });
 }
 
 console.log('\n=== step1.5 LSP before/after ===');
 console.log(`tasks=${tasks.length} repeat=${repeat} model=${process.env.MODEL_NAME ?? 'gemma-smart'}`);
-console.log('mode\t正答\t総tokens(中央)\t往復(中央)');
+console.log('mode\t正答\tエラー\t総tokens(中央)\t往復(中央)');
 for (const a of results) {
-  console.log(`${a.mode}\t${a.pass}/${a.n}\t${a.tokens}\t${a.rounds}`);
+  const tok = a.tokens === 0 && a.errors === a.n ? 'N/A(全エラー)' : String(a.tokens);
+  console.log(`${a.mode}\t${a.pass}/${a.n}\t${a.errors}/${a.n}\t${tok}\t${a.rounds}`);
 }
 
-// 差分の一言サマリ (none → lsp)
+// 差分の一言サマリ (none → lsp)。lsp が全エラーなら token 比較は出さない。
 const none = results.find((r) => r.mode === 'none');
 const lsp = results.find((r) => r.mode === 'lsp');
 if (none && lsp) {
-  const dTok = none.tokens === 0 ? 0 : Math.round(((lsp.tokens - none.tokens) / none.tokens) * 100);
-  console.log(
-    `\nLSP 有無の差: 正答 ${none.pass}/${none.n} → ${lsp.pass}/${lsp.n}、総tokens ${dTok >= 0 ? '+' : ''}${dTok}%`,
-  );
+  let tokLine = '';
+  if (lsp.errors === lsp.n) {
+    tokLine = '、lsp は全エラー(収束せず) のため token 比較なし';
+  } else if (none.tokens > 0) {
+    const dTok = Math.round(((lsp.tokens - none.tokens) / none.tokens) * 100);
+    tokLine = `、総tokens ${dTok >= 0 ? '+' : ''}${dTok}%`;
+  }
+  console.log(`\nLSP 有無の差: 正答 ${none.pass}/${none.n} → ${lsp.pass}/${lsp.n}${tokLine}`);
 }
